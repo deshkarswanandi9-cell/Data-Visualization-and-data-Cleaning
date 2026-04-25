@@ -8,6 +8,7 @@ from src.cleaner import clean_data
 from src.transformer import transform_data
 from src.visualizer import visualize_data
 from src.reporter import generate_report
+from src.predictor import train_and_evaluate
 import pandas as pd
 import os
 
@@ -40,8 +41,13 @@ def main():
     # 4. Phase 4: Visualization
     charts = visualize_data(transformed_df)
     
-    # 5. Phase 5: Reporting
-    generate_report(raw_df, transformed_df, charts)
+    # 5. Phase 5: Predictive Modeling
+    # Default target for Titanic is 'survived' (transformed to 'survived' by snake_case)
+    target = 'survived'
+    ml_results, ml_plots = train_and_evaluate(transformed_df, target)
+
+    # 6. Phase 6: Reporting
+    generate_report(raw_df, transformed_df, charts, ml_results, ml_plots)
 
     print("\n" + "=" * 50)
     print("  PIPELINE COMPLETED SUCCESSFULLY!")

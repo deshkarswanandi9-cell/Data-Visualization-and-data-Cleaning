@@ -2,8 +2,8 @@ import os
 import datetime
 from fpdf import FPDF
 
-def export_as_pdf(df_raw, df_clean, charts_list, output_path):
-    """Generates a comprehensive PDF report with data metrics, cleaning logs, and charts."""
+def export_as_pdf(df_raw, df_clean, charts_list, ml_results, ml_plots, output_path):
+    """Generates a comprehensive PDF report with data metrics, cleaning logs, charts, and ML results."""
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
     
@@ -25,6 +25,24 @@ def export_as_pdf(df_raw, df_clean, charts_list, output_path):
     pdf.cell(0, 10, f"Original Dataset Shape: {df_raw.shape[0]} rows x {df_raw.shape[1]} columns", ln=True)
     pdf.cell(0, 10, f"Duplicate Rows Found: {df_raw.duplicated().sum()}", ln=True)
     pdf.ln(5)
+
+    # First 5 Rows Preview
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(0, 10, "Data Preview (First 5 Rows):", ln=True)
+    pdf.set_font("Helvetica", "", 8) # Smaller font for the preview table
+    
+    preview_df = df_raw.head()
+    preview_cols = preview_df.columns.tolist()
+    preview_data = [preview_cols]
+    for _, row_data in preview_df.iterrows():
+        preview_data.append([str(val)[:10] for val in row_data.values]) # Truncate values to fit
+        
+    with pdf.table(width=190) as table:
+        for data_row in preview_data:
+            row = table.row()
+            for datum in data_row:
+                row.cell(datum)
+    pdf.ln(10)
     
     # Missing Values Table
     pdf.set_font("Helvetica", "B", 12)
@@ -86,6 +104,23 @@ def export_as_pdf(df_raw, df_clean, charts_list, output_path):
     if encoded_cols:
         pdf.cell(0, 10, f"Encoded Categorical Columns: {', '.join(encoded_cols)}", ln=True)
     
+    pdf.ln(5)
+    
+    # Final Schema Table
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(0, 10, "Final Transformed Schema:", ln=True)
+    pdf.set_font("Helvetica", "", 10)
+    
+    schema_data = [["Column", "Dtype"]]
+    for col, dtype in df_clean.dtypes.items():
+        schema_data.append([col, str(dtype)])
+        
+    with pdf.table(width=100) as table:
+        for data_row in schema_data:
+            row = table.row()
+            for datum in data_row:
+                row.cell(datum)
+    
     pdf.ln(10)
     
     # --- 4. Visualizations (Phase 4) ---
@@ -107,18 +142,56 @@ def export_as_pdf(df_raw, df_clean, charts_list, output_path):
         pdf.image(chart_path, x=15, w=180)
         pdf.ln(10)
         
+    # --- 5. Predictive Modeling (Phase 5) ---
+    if ml_results:
+        pdf.add_page()
+        pdf.set_font("Helvetica", "B", 16)
+        pdf.cell(0, 10, "5. Predictive Modeling Results", ln=True)
+        pdf.set_font("Helvetica", "", 11)
+        
+        pdf.cell(0, 10, "Models trained to predict the target variable using the cleaned dataset.", ln=True)
+        pdf.ln(5)
+        
+        # ML Metrics Table
+        pdf.set_font("Helvetica", "B", 12)
+        pdf.cell(0, 10, "Model Performance Comparison:", ln=True)
+        pdf.set_font("Helvetica", "", 10)
+        
+        ml_data = [["Model", "Metric", "Value"]]
+        for model, metrics in ml_results.items():
+            for metric, val in metrics.items():
+                ml_data.append([model, metric, f"{val:.4f}"])
+        
+        with pdf.table(width=150) as table:
+            for data_row in ml_data:
+                row = table.row()
+                for datum in data_row:
+                    row.cell(datum)
+        pdf.ln(10)
+
+        # ML Plots
+        if ml_plots:
+            for plot_name, plot_path in ml_plots.items():
+                if pdf.get_y() > 180:
+                    pdf.add_page()
+                
+                pdf.set_font("Helvetica", "B", 12)
+                pdf.cell(0, 10, plot_name.replace("_", " ").title(), ln=True)
+                pdf.image(plot_path, x=15, w=150)
+                pdf.ln(10)
+
     try:
         pdf.output(output_path)
         print(f"PDF Report saved to: {output_path}")
     except Exception as e:
         print(f"Failed to export PDF report: {e}")
 
-def generate_report(df_raw, df_clean, charts_list, output_path_html="output/report.html", output_path_pdf="output/report.pdf"):
+def generate_report(df_raw, df_clean, charts_list, ml_results=None, ml_plots=None, output_path_html="output/report.html", output_path_pdf="output/report.pdf"):
     """
-    Phase 5: Reporting & Summary
+    Phase 6: Reporting & Summary
     Prints a console report and exports both HTML and PDF reports.
     """
-    print("\n--- Phase 5: Reporting & Summary ---")
+    print("\n--- Phase 6: Reporting & Summary ---")
     
     if df_raw is None or df_clean is None:
         print("Missing data to generate report.")
@@ -198,6 +271,25 @@ def generate_report(df_raw, df_clean, charts_list, output_path_html="output/repo
             {"".join([f'<div class="chart-item"><h3>{os.path.basename(path).replace(".png", "").replace("_", " ").title()}</h3><img src="charts/{os.path.basename(path)}" alt="Chart"></div>' for path in charts_list])}
         </div>
 
+        {f'''
+        <h2>Predictive Modeling</h2>
+        <div class="summary-card">
+            <h3>Model Performance</h3>
+            <table style="width:100%; border-collapse: collapse; margin-bottom: 20px;">
+                <tr style="background-color: #3498db; color: white;">
+                    <th style="padding: 10px; border: 1px solid #ddd;">Model</th>
+                    <th style="padding: 10px; border: 1px solid #ddd;">Metric</th>
+                    <th style="padding: 10px; border: 1px solid #ddd;">Value</th>
+                </tr>
+                {"".join([f'<tr><td style="padding: 10px; border: 1px solid #ddd;">{model}</td><td style="padding: 10px; border: 1px solid #ddd;">{metric}</td><td style="padding: 10px; border: 1px solid #ddd;">{val:.4f}</td></tr>' for model, metrics in ml_results.items() for metric, val in metrics.items()])}
+            </table>
+            
+            <div class="chart-container">
+                {"".join([f'<div class="chart-item"><h3>{name.replace("_", " ").title()}</h3><img src="ml/{os.path.basename(path)}" alt="ML Plot"></div>' for name, path in ml_plots.items()]) if ml_plots else ""}
+            </div>
+        </div>
+        ''' if ml_results else ""}
+
         <footer>
             Generated by Antigravity AI Data Pipeline &copy; 2026
         </footer>
@@ -213,7 +305,7 @@ def generate_report(df_raw, df_clean, charts_list, output_path_html="output/repo
         print(f"Failed to export HTML report: {e}")
 
     # --- Export PDF ---
-    export_as_pdf(df_raw, df_clean, charts_list, output_path_pdf)
+    export_as_pdf(df_raw, df_clean, charts_list, ml_results, ml_plots, output_path_pdf)
 
 
 if __name__ == "__main__":
